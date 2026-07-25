@@ -19,7 +19,7 @@ A skill faz o resto: identifica quem é "Cliente X" (se houver pasta em `cliente
 ## O que a skill faz
 
 - **Identifica o cliente e o tipo de mensagem** a partir de uma frase em linguagem natural — não exige comando estruturado nem parâmetros.
-- **Escolhe o formato automaticamente** entre 7 formatos diferentes (status, update corrido, pendências dos dois lados, pré-call, pós-reunião, relatório de resultados, resultados parciais) com base no que você descreveu.
+- **Escolhe o formato automaticamente** entre 6 formatos diferentes (status, update corrido, pré-call, pós-reunião, relatório de resultados, resultados parciais) com base no que você descreveu.
 - **Calibra tom e vocabulário pelo histórico real daquele cliente** — se o repo tiver `clientes/<slug>/perfil.md` com exemplos de mensagens reais, a skill usa exatamente aquele padrão de saudação, formalidade e emoji. Sem isso, usa um tom geral neutro/profissional calibrado por padrões validados de atendimento B2B.
 - **Evita repetição entre mensagens** — se houver histórico de rotação (ver seção de retroalimentação abaixo), a skill não repete a mesma saudação/fechamento da mensagem anterior.
 - **Nunca inventa dado** — trabalha só com o que foi fornecido no prompt ou existe no contexto do cliente. Métrica sem dado não aparece como placeholder, simplesmente não entra na mensagem.
@@ -42,8 +42,15 @@ Copie a pasta deste repositório inteira para dentro do seu projeto, no caminho:
 ```
 Claude Code carrega qualquer skill que esteja em `.claude/skills/<nome>/SKILL.md` automaticamente — não precisa registrar em nenhum outro lugar. Reinicie a sessão do Claude Code (ou abra uma nova) depois de copiar os arquivos.
 
-### 3. Não precisa de mais nada
-Ao contrário de outras skills que dependem de MCPs externos (Ekyte, BigQuery), esta skill funciona 100% com o que está no repositório e no prompt. O único MCP opcional é o de gestão de tarefas (Ekyte ou equivalente), usado só se você pedir prazos explicitamente — sem ele, a skill simplesmente não consulta prazos e segue normalmente.
+### 3. MCPs — opcionais, só entram se você pedir
+No uso básico (você descreve o que aconteceu, a skill escreve a mensagem), não precisa de nenhum MCP — funciona 100% com o que está no repositório e no prompt. Dois MCPs entram em cena só quando o pedido ativa um comportamento específico, nunca por padrão:
+
+| MCP | Quando é usado | Sem ele |
+|---|---|---|
+| Gestão de tarefas (Ekyte ou equivalente) | Só se você pedir prazos/tarefas explicitamente | A skill não consulta prazos e segue normalmente com o resto do pedido |
+| Mídia (Flow/Cockpit ou equivalente — dado de Meta/Google Ads) | Só no **Modo de dados ao vivo** (ver seção própria abaixo), quando o pedido menciona um período real em vez de números digitados | A skill avisa que não consegue puxar dado ao vivo e segue só com o que foi fornecido no prompt — nunca trava a geração por isso |
+
+Sem nenhum dos dois MCPs instalados, a skill continua funcionando para o caso de uso principal (gerar a mensagem a partir do que você descrever) — eles só ampliam o que ela consegue buscar sozinha.
 
 ### 4. Bootstrap automático (não precisa criar nada antes)
 Se o seu repo ainda não tem a pasta `clientes/` ou o cliente que você mencionar ainda não existe, a skill cria a estrutura mínima sozinha na primeira execução:
@@ -118,7 +125,7 @@ Esse modo exige as mesmas "IDs de referência" que o `/contexto-refresh` usa (`c
 
 **Quer especificar algo manualmente?** Pode, a qualquer momento:
 - Tom: "tom mais formal", "tom mais próximo", "mais direto"
-- Formato: "quero no formato de dois times", "manda como pré-call"
+- Formato: "quero no formato de pendências", "manda como pré-call"
 - Cliente sem pasta ainda: descreva os dados do cliente direto no prompt ("o cliente é X, está na fase de captação, tom é próximo") — a skill usa isso e ainda cria a pasta (ver Bootstrap automático)
 
 ---
@@ -131,7 +138,6 @@ A skill escolhe sozinha, mas você pode pedir explicitamente:
 |---|---|---|
 | FEITO / PENDENTE | Status geral de entregas, ✅/🔁 como marcadores | "status das entregas" |
 | Entregas em andamento (➡️) | Update corrido, cada item com contexto e prazo/link | "update do que está rolando" |
-| Dois times (🟧🟥) | Pendências dos dois lados (agência e cliente) | "o que está parado dos dois lados" |
 | Pré-call | Pauta antes de reunião | "pré-call pra call das 14h" |
 | Pós-reunião / Alinhamento | Formalizar combinados com prazo por data | "resumo do que combinamos na call" |
 | Relatório de resultados | Métricas + contexto + backlog do período | "relatório de resultados de maio" |
@@ -227,7 +233,7 @@ Diga no prompt: "tom mais formal", "tom mais próximo", "mais direto". A skill r
 Não. Ela gera o texto para você copiar e colar no WhatsApp, grupo ou canal que for. Nenhum envio automático.
 
 **Preciso de MCPs específicos para usar?**
-Não. O único MCP relevante (gestão de tarefas/prazos) é opcional e só é consultado se você pedir prazos explicitamente.
+Não, para o uso básico. Dois MCPs são opcionais e só entram em ação quando o pedido pede especificamente por eles: gestão de tarefas (Ekyte, consultado só se você pedir prazos/tarefas) e mídia/Flow (consultado só no Modo de dados ao vivo, quando você pede um período real em vez de digitar os números). Sem eles, a skill segue normalmente com o que foi fornecido no prompt.
 
 **A skill pode puxar os números sozinha, sem eu digitar?**
 Sim, se você pedir um período real ou dado atualizado (ver "Modo de dados ao vivo" acima). Ela puxa do Flow e do Ekyte, reconcilia contra o Growth Pack e só gera direto se tudo bater — se houver qualquer divergência, ela para e te pergunta antes de escrever a mensagem.
