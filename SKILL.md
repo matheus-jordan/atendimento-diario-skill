@@ -93,22 +93,16 @@ Update corrido sem divisão de status. Cada item carrega: o que é + contexto + 
 - Prazo condicional quando há dependência: "Com o acesso, o prazo é: XX/XX"
 - Bloqueio nomeado com diagnóstico + pedido específico
 
-### 3. Dois times (🟧 🟥)
-Quando há pendências dos dois lados (agência e cliente). Bloco separado por time.
-- 🟧 TIME [CLIENTE] → ações que dependem deles
-- 🟥 TIME V4 → entregas da agência com prazo ou status
-- Tags nominais quando o item está em alguém específico
-
-### 4. Pré-call
+### 3. Pré-call
 Compartilhar pauta antes de reunião. Lista limpa, sem emojis de status.
 - Tom leve, encerramento com aviso do link ("10 min antes envio o link")
 
-### 5. Pós-reunião / Alinhamento
+### 4. Pós-reunião / Alinhamento
 Formalizar combinados + próximas ações com prazo por data.
 - Pode incluir seção narrativa de validação de meta quando relevante
 - Organizado por data, não por status
 
-### 6. Relatório de resultados
+### 5. Relatório de resultados
 Métricas + contexto + backlog. Referência canônica:
 
 ```
@@ -146,7 +140,7 @@ Valor vendido: R$ [valor]
 - Alinhamento por espaços nas métricas para criar coluna visual
 - Separadores ━━━ são opcionais, usar só quando o volume de seções justificar
 
-### 7. Resultados parciais
+### 6. Resultados parciais
 Mesmo formato do relatório, mas com framing honesto de período no header: `📊 RESULTADOS PARCIAIS (DD/MM a DD/MM)`. O contexto diagnóstico é mais importante que os números — conecta dado → problema → ação.
 
 ---
@@ -172,7 +166,7 @@ Mesmo formato do relatório, mas com framing honesto de período no header: `�
 - Numeração formal `1. 2.` para pontos distintos — soa corporativo
 - Jargão: "devolutivas", "assertivos", "encaminhamento"
 - Seções vazias ou com "a preencher" — se não tem dado, não tem seção
-- Mensagem que mistura muitos assuntos sem hierarquia clara — preferir separar ou usar formato de dois times
+- Mensagem que mistura muitos assuntos sem hierarquia clara — preferir separar em mensagens distintas
 
 ---
 
