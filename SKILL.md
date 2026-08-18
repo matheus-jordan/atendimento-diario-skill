@@ -1,191 +1,553 @@
-# /atendimento-diario — Atendimento Diário 1.0
-
-Skill para geração de mensagens de atendimento ao cliente (WhatsApp/grupos). Não é um template fixo — o formato serve a mensagem, não o contrário.
-
-## Ativação
-
-Usar quando o usuário solicitar: "manda um atendimento pro cliente X", "gera update de entregas", "relatório de resultados", "pauta da call", "pós-reunião", "passa um atendimento pra Jaque", etc. Também via comando explícito `/atendimento-diario`.
-
-Quando o pedido menciona um período real ou pede pra puxar dado atualizado ("quero fazer um atendimento diário com o relatório da última semana do cliente X", "puxa o que tá aberto no Ekyte e manda um atendimento", "relatório com os números atualizados de julho"), ativar também o **Modo de dados ao vivo** (ver seção própria abaixo) em vez de esperar só o que foi digitado no prompt.
-
+---
+name: atendimento-diario
+description: Gera mensagens consultivas de atendimento para clientes em WhatsApp/grupos. Use para atendimento, update, relatório, status, pauta de call, pós-call, follow-up, cobrança, reporte de lead e comunicação de rotina; investigar contexto, tom real, histórico recente e dados faltantes antes de escrever.
 ---
 
-## Fluxo
+# Atendimento Diário
 
-1. **Identificar** — cliente + tipo de mensagem + tom (se informado)
-2. **Consultar contexto** — ler na ordem (se existirem):
-   - `clientes/<cliente>/contexto.md` — estado atual, métricas, Norte de Resultado
-   - `clientes/<cliente>/perfil.md` — **obrigatório: ler as seções "Tom de comunicação no grupo" e "Rotação recente de atendimento"** antes de gerar qualquer mensagem. A primeira define saudação, formalidade, emoji e vocabulário calibrados por mensagens reais do Matheus com aquele cliente. A segunda (alimentada pelo `/contexto-refresh`) lista as últimas saudações/formatos/fechamentos realmente enviados — é o anti-repetição com dado real, não vibe
-   - `clientes/<cliente>/processos.md` — como essa conta opera (rituais, cadência, quem faz o quê)
-   Se o contexto estiver incompleto, delegar para `/cs-notebooklm-consulta-cliente`
-3. **Calibrar tom pelo perfil** — a seção "Tom de comunicação no grupo" do `perfil.md` é a referência primária de tom. Se o usuário especificar um tom diferente, usar o do usuário. Se não houver seção de tom no perfil, usar o tom geral definido na seção Tom abaixo
-4. **Consultar Ekyte** — somente se o usuário pedir prazos ou tarefas explicitamente. Se o pedido ativa o Modo de dados ao vivo (ver seção própria), este passo vira obrigatório e segue o fluxo de pull + reconciliação descrito lá
-5. **Escolher formato, saudação e fechamento evitando repetição** — com base no tipo de mensagem, no conteúdo disponível e checando contra "Rotação recente de atendimento" em `perfil.md`: se a saudação, o formato ou o fechamento planejados coincidem com a entrada mais recente da lista, trocar por uma variação diferente antes de prosseguir. Sem essa seção no perfil (cliente novo ou primeiro ciclo), aplicar o critério geral da seção Anti-padrões abaixo
-6. **Gerar mensagem** — com os dados reais fornecidos, sem inflar
+Gerar mensagens de atendimento que pareçam humanas, consultivas e específicas para cada cliente. A skill nunca deve funcionar como template fixo. O formato serve ao contexto, ao cliente e ao objetivo da conversa.
 
----
+## Princípios Centrais
 
-## Bootstrap automático (repo sem a estrutura ainda)
+- Ser consultivo antes de ser produtivo: quando faltar dado essencial, perguntar.
+- Não robotizar: evitar estrutura repetida, saudação repetida, fechamento repetido e frase com cara de IA.
+- Personalizar por cliente: cada cliente tem um jeito próprio de receber update, cobrança, relatório e alinhamento.
+- Separar "o que dizer" de "como dizer": o contexto define o conteúdo; o perfil e o histórico definem o tom.
+- Não inventar dados, datas, status, resultados, responsáveis, links ou prazos.
+- Preservar clareza operacional: mensagem bonita sem próximo passo claro não serve.
+- Usar acentuação correta em toda mensagem final, em todo contexto criado e em toda atualização de `perfil.md`/`contexto.md`.
 
-Esta skill funciona em qualquer repositório, mesmo sem nenhuma pasta `clientes/` prévia. Se ao consultar o contexto (passo 2) algo estiver faltando, criar antes de prosseguir — nunca travar nem pular a personalização por falta de arquivo:
+## Estrutura Esperada do Cliente
 
-| Faltando | O que criar |
-|---|---|
-| `clientes/<cliente>/` inteira | Criar a pasta com `contexto.md` mínimo (nome do cliente + o que foi informado no prompt) e `perfil.md` no template abaixo |
-| `clientes/<cliente>/perfil.md` | Criar com as seções vazias: `## Tom de comunicação no grupo` (sem exemplos ainda) e `## Rotação recente de atendimento` (lista vazia, comentário indicando que `/contexto-refresh` preenche depois) |
-| `clientes/<cliente>/historico/` | Criar a pasta junto com o primeiro `atendimentos-log.md` (ver seção de log mais abaixo) |
+Tratar como cliente principal apenas pastas em `clientes/<cliente>/` que tenham `contexto.md`, `perfil.md`, `processos.md`, `historico/` ou arquivos de cliente. Pastas de app/deploy dentro de `clientes/` podem ter `.vercel`, `index.html` e assets, mas não devem ser tratadas como cliente principal se não tiverem contexto/perfil.
 
-Template mínimo de `perfil.md` quando criado do zero:
+Ler, quando existirem:
+
+```text
+clientes/<cliente>/
+  perfil.md
+  historico/atendimentos-log.md
+  contexto.md
+  processos.md
+  campanhas.md
+  aprendizados.md
+  historico/
+  planejamento/
+  entregas/
+  outputs/
+```
+
+Ordem padrão de leitura:
+
+1. `perfil.md`
+2. `historico/atendimentos-log.md`
+3. `contexto.md`
+4. `processos.md`
+5. `campanhas.md`
+6. `aprendizados.md`
+7. arquivos recentes em `historico/`
+8. arquivos relevantes em `planejamento/`, `entregas/` e `outputs/`
+
+## Bootstrap de Cliente
+
+Se `clientes/<cliente>/` não existir, criar antes de gerar qualquer mensagem:
+
+```text
+clientes/<cliente>/
+  contexto.md
+  perfil.md
+  historico/atendimentos-log.md
+```
+
+`contexto.md` mínimo:
+
 ```markdown
-# Perfil: <Nome do Cliente>
+# Contexto: <cliente>
+
+## Estado atual
+- Criado a partir do pedido de atendimento.
+
+## Informações conhecidas
+- <registrar apenas o que o usuário informou>
+```
+
+`perfil.md` mínimo:
+
+```markdown
+# Perfil: <cliente>
+
+## Como falar com este cliente
+- Ainda sem histórico suficiente. Usar tom consultivo, humano e claro.
 
 ## Tom de comunicação no grupo
-(ainda sem histórico suficiente — usar o tom geral da seção "Tom" desta skill até acumular mensagens reais)
+- Formalidade: a calibrar
+- Emojis: a calibrar
+- Tamanho médio: a calibrar
+- Saudação: a calibrar
+- Fechamento: a calibrar
 
-## Rotação recente de atendimento (evitar repetir — atualizado por /contexto-refresh)
-(vazio — sem atendimentos anteriores registrados ainda)
+## Padrão real de atendimento
+- Ainda sem mensagens reais suficientes.
+
+## Correções recorrentes do humano
+- Ainda sem correções registradas.
+
+## Rotação recente de atendimento
+- Ainda sem atendimentos registrados.
 ```
-Sem `/contexto-refresh` instalado no repo, essas duas seções simplesmente nunca se preenchem sozinhas — a skill continua funcionando normalmente com o tom geral e o critério manual de variação da seção Anti-padrões. `/contexto-refresh` é um complemento opcional, não uma dependência obrigatória.
 
----
+Criar `historico/atendimentos-log.md` com:
 
-## Modo de dados ao vivo (relatório com pull direto)
+```markdown
+# Log de atendimentos gerados - <cliente>
 
-Quando o pedido implica dado atual e não só o que foi digitado no prompt (período mencionado, "puxa os números", "o que está aberto no Ekyte", relatório sem números fornecidos manualmente), a skill busca direto nas fontes em vez de esperar o próximo ciclo do `/contexto-refresh`. Isso é um pull pontual pra gerar esta mensagem — nunca escreve em `contexto.md`, `campanhas.md` ou `aprendizados.md` (quem interpreta e persiste isso é sempre o `/contexto-refresh`, ver seção de retroalimentação).
+> Registrar cada mensagem proposta pela skill. Quando houver WhatsApp conectado, comparar depois com o que foi realmente enviado.
+```
 
-**Pré-requisito:** as mesmas "IDs de referência" que o `/contexto-refresh` usa, em `clientes/<cliente>/contexto.md` (`client_documentid`, `Ekyte workspace`, `Growth Pack`). Sem elas, avisar que o pull ao vivo não é possível e seguir só com o que foi fornecido no prompt — nunca travar a geração da mensagem por causa disso.
+## Inteligência de Contexto
 
-**Passos:**
-1. **Mídia** — puxar direto do Flow (`flow_media_campaign_summary` / `flow_media_ad_summary`) pro período pedido, mesma lógica do `/contexto-refresh`.
-2. **Ekyte** — puxar tasks/tickets do projeto do mês corrente (`list_project_tasks` / `list_tickets`), especialmente o que está aberto/pendente se o pedido mencionar isso.
-3. **Reconciliar mídia contra o Growth Pack** — mesma regra do `/contexto-refresh`: até 2 dias de defasagem é esperado (atualização manual), não é erro. Além disso, é divergência.
-4. **Decisão:**
-   - **Tudo bate (dentro da tolerância) e não há ambiguidade no Ekyte:** gerar a mensagem direto com os números pulled, sem pedir confirmação.
-   - **Alguma nuance, divergência ou erro aparece** (números não reconciliam, task com status conflitante, dado que não fecha): **parar e perguntar antes de gerar.** Mostrar o número/fato específico que não bateu e as duas versões encontradas (ex: "Flow mostra R$X de investido, Growth Pack mostra R$Y — qual uso?"). Nunca escolher um lado sozinho, nunca gerar a mensagem com dado incerto.
+Antes de gerar qualquer mensagem, montar mentalmente uma diretriz de comunicação:
 
-Esse modo não substitui o `/contexto-refresh` — é um atalho pra quando você quer o relatório agora, com dado fresco, sem esperar o próximo sync. Se o `/contexto-refresh` já rodou recentemente e `campanhas.md`/`contexto.md` estão atualizados, geralmente não é preciso ativar este modo — o contexto já lido no passo 2 do Fluxo já é suficiente.
+```text
+Cliente:
+Pessoa/grupo:
+Objetivo da mensagem:
+Período:
+Tom real:
+Nível de detalhe:
+Assuntos sensíveis:
+Saudações recentes a evitar:
+Fechamentos recentes a evitar:
+Dados obrigatórios que faltam:
+```
 
----
+Usar `perfil.md` como fonte principal do jeito de falar. Usar `contexto.md`, `processos.md`, `campanhas.md`, `aprendizados.md`, `historico/`, `planejamento/`, `entregas/` e `outputs/` para entender o que precisa ser dito.
+
+Se WhatsApp estiver conectado, ler as últimas mensagens reais do grupo/contato antes de calibrar o tom. Priorizar o que foi realmente enviado em WhatsApp acima do que a skill gerou anteriormente.
+
+## Regra de Pergunta Obrigatória
+
+Não gerar a mensagem final se faltar qualquer contexto essencial para o tipo de atendimento pedido.
+
+Perguntar antes de gerar quando faltar:
+
+- Cliente.
+- Tipo de atendimento.
+- Período de relatório, quando o pedido mencionar resultado, semana, mês, performance, parcial ou fechamento.
+- Destinatário/tom, quando houver risco de falar com a pessoa errada ou em nível inadequado de formalidade.
+- Dados numéricos obrigatórios, quando o pedido exigir métricas.
+- Status real, quando o pedido for sobre tarefas, entregas, prazos ou pendências e o contexto local não deixar claro.
+- Data/hora, quando for confirmação de call, agenda, lembrete, pré-call ou pós-call com próximos passos.
+- Link, arquivo ou entrega mencionada pelo usuário mas não encontrada.
+- Planilha de backup ou fonte de lead, quando o pedido for reportar lead e a base não estiver disponível.
+- Decisão em caso de divergência entre fontes.
+
+Fazer no máximo 1 a 3 perguntas objetivas por vez. Se houver muitas lacunas, perguntar primeiro a lacuna que mais muda a mensagem.
+
+Exemplos:
+
+- Pedido: "gera um relatório para a Gigaclima"
+  Resposta: "Qual período você quer usar no relatório da Gigaclima: semana atual, última semana fechada ou mês de agosto até hoje?"
+- Pedido: "manda confirmação de call para Nuveto"
+  Resposta: "Qual data/horário da call e qual pauta principal eu devo confirmar?"
+- Pedido: "reporta o lead novo da Meca"
+  Ação: procurar lead em planilha de backup/contexto. Se não encontrar, perguntar: "Você consegue me enviar a planilha de backup ou os dados do lead para eu reportar com contexto?"
+
+## Pedido Amplo: Menu Consultivo
+
+Quando o usuário disser algo amplo como "quero um atendimento para <cliente>", não escrever a mensagem direto.
+
+Primeiro investigar o cliente e responder com opções baseadas em:
+
+- padrão do cliente em `perfil.md`;
+- assuntos recentes em `historico/`;
+- frentes abertas em `contexto.md`, `processos.md`, `campanhas.md` e `planejamento/`;
+- entregas recentes em `entregas/` e `outputs/`;
+- tarefas/status ao vivo, se ferramenta conectada e pertinente;
+- leads recentes em planilha de backup ou dados de CRM, se houver.
+
+Formato da resposta:
+
+```markdown
+Para <cliente>, hoje faz sentido seguir por um destes caminhos:
+
+- Relatório semanal de resultados - porque <motivo contextual>.
+- Status geral de tarefas - porque <motivo contextual>.
+- Agenda/confirmação de call - porque <motivo contextual>.
+- Reporte de lead novo - porque <motivo contextual>.
+- Follow-up de <demanda específica encontrada no contexto> - porque <motivo contextual>.
+
+Qual caminho você quer que eu gere?
+```
+
+As opções devem variar por cliente e contexto. Não oferecer sempre a mesma lista. Se o contexto indicar uma prioridade clara, dizer:
+
+```markdown
+Minha recomendação: <opção>, porque <motivo>.
+```
+
+Ainda assim, esperar escolha do usuário antes de escrever, exceto se o pedido já especificar tipo, período e objetivo.
+
+## Tipos de Atendimento
+
+### Relatório Semanal ou Periódico
+
+Usar quando o usuário pedir resultados, performance, fechamento, parcial ou resumo de período.
+
+Contexto obrigatório:
+
+- período;
+- fonte dos números ou números fornecidos;
+- leitura do resultado;
+- próximos passos.
+
+Se faltar período, perguntar. Se faltar número e não houver fonte conectada confiável, perguntar ou gerar apenas uma mensagem sem métricas se o usuário aprovar.
+
+O relatório deve parecer um atendimento consultivo, não uma tabela colada. Adaptar densidade ao contexto:
+
+- **Curto:** usar quando o cliente precisa de visão rápida e poucos números.
+- **Completo:** usar quando há meta, leitura comercial, pendências, backlog e próximos passos.
+- **Híbrido:** usar quando os números são simples, mas existe uma decisão ou cobrança importante.
+
+Usar emojis quando melhorarem leitura no WhatsApp e combinarem com o cliente. Bons marcadores: `📝`, `📊`, `🔁`, `🗂️`, `✅`, `⚠️`. Não transformar todo bloco em carnaval visual. O emoji serve como sinalização, não como enfeite.
+
+Estrutura curta possível:
+
+```text
+Passando para trazer a visão dos nossos resultados da última semana (<período>):
+
+📝 RESULTADOS DA SEMANA (<período>) 📝
+
+- Investimento: <valor>
+- Leads: <número>
+- Custo por Clique (CPC): <valor>
+- Custo por Lead (CPL): <valor>
+
+📊 FOCO E PRÓXIMOS PASSOS 📊
+
+<leitura objetiva: o que aconteceu, qual ação foi tomada e qual foco agora.>
+```
+
+Estrutura completa possível:
+
+```text
+Como prometido, segue o relatório das campanhas.
+
+📊 Resultados parciais do mês de <mês>
+Investido: <valor>
+Leads: <número> (<contexto de meta, se houver>)
+<métricas específicas do cliente, se houver>
+
+📝 Contexto
+<leitura consultiva: qualidade do resultado, relação com meta, ponto de atenção e impacto operacional.>
+
+🔁 <pendência ou frente 1 com responsável claro>
+
+🔁 <pendência ou frente 2 com próximo passo claro>
+
+🔁 <pendência ou frente 3 com prazo claro>
+```
+
+Estrutura com backlog e convite para alinhamento:
+
+```text
+📊 CAMPANHAS (<período>)
+Investido: <valor>
+Mensagens iniciadas / leads / MQLs: <número>
+Custo por Lead: <valor>
+
+📝 CONTEXTO
+<leitura sobre performance, causa provável, ajuste feito e risco/oportunidade.>
+
+🗂️ BACKLOG DA SEMANA
+→ <ação em andamento + por que importa>
+→ <próxima entrega + critério de acompanhamento>
+
+<ponte consultiva para decisão ou reunião, se fizer sentido.>
+
+<pergunta objetiva com opções de horário ou próximo passo.>
+```
+
+Regras de escrita para relatórios:
+
+- Começar direto quando o relacionamento permitir: "Como prometido..." ou "Passando para trazer...".
+- Usar "Contexto" para transformar número em leitura, não para repetir métricas.
+- Em resultado bom, comemorar com sobriedade e conectar ao próximo gargalo.
+- Em resultado ruim, nomear causa provável + ação tomada + foco de acompanhamento.
+- Em pendência comercial, explicar o impacto: sem preenchimento de planilha/CRM, a visibilidade fica limitada.
+- Puxar o cliente para decisão quando fizer sentido: pedir horário, aprovação, retorno ou validação.
+- Não usar sempre "RESULTADOS / CONTEXTO / BACKLOG"; variar os títulos e o volume conforme o cliente.
+
+### Agenda ou Confirmação de Call
+
+Usar para validar agenda, lembrar reunião, confirmar horário ou preparar check-in.
+
+Contexto obrigatório:
+
+- data, se houver;
+- horário;
+- pauta;
+- objetivo da call;
+- quem precisa participar, se relevante.
+
+Não inventar link. Se o link não estiver disponível, dizer que será enviado perto do horário ou perguntar.
+
+Estrutura possível:
+
+```text
+🗓️ AGENDA 🗓️
+Nós teremos nosso check-in mensal, onde vamos apresentar o resultado do mês de <mês> e o andamento/próximos passos das tarefas do mês de <mês seguinte>.
+
+Podemos confirmar essa agenda às <horário>?
+```
+
+Regras:
+
+- Ser simples e direto quando a agenda já estiver validada.
+- Nomear o objetivo da call, não só "nossa reunião".
+- Se houver check-in mensal, conectar resultado do mês anterior + tarefas/próximos passos do mês atual.
+- Se o horário não estiver confirmado, perguntar de forma objetiva.
+
+### Status Geral de Tarefas
+
+Usar para updates operacionais, entregas, pendências, aprovações, prazos e visão geral da semana.
+
+Contexto obrigatório:
+
+- tarefas ou frentes;
+- status real;
+- responsável quando houver pendência;
+- prazo quando for prometido.
+
+O status deve carregar contexto em cada item. Não fazer lista seca. Explicar o que está acontecendo, por que aquele status importa e o próximo passo.
+
+Estrutura fluida possível:
+
+```text
+Passando uma atualização geral:
+
+✅ <frente 1>
+
+<status + contexto + prazo/responsável quando houver.>
+
+✅ <frente 2>
+
+<status + contexto + motivo da decisão ou investigação.>
+
+✅ <frente 3>
+
+<status + próximo passo + impacto esperado.>
+```
+
+Quando houver tarefas em aprovação e execução, usar blocos separados:
+
+```text
+🔄 PENDENTES APROVAÇÃO 🔄
+
+-- <entrega pendente + contexto curto>:
+<link>
+
+-- <outra entrega pendente + contexto curto>:
+<link>
+
+📊 EM EXECUÇÃO 📊
+
+-- <frente em execução + status claro>
+
+-- <frente estratégica em estudo + próximo passo>
+```
+
+Regras:
+
+- Usar `✅` para frentes encaminhadas, concluídas ou bem endereçadas.
+- Usar `🔄 PENDENTES APROVAÇÃO 🔄` quando o foco for destravar o cliente.
+- Usar `📊 EM EXECUÇÃO 📊` para frentes internas já andando.
+- Incluir links inline logo abaixo do item quando o objetivo for aprovação.
+- Se uma previsão depender de investigação, explicar a causa: "porque estamos investigando a melhor forma de...".
+- Quando uma frente de mídia estiver performando bem, explicar como isso afeta a próxima decisão: começar com baixo investimento, proteger performance, calibrar sinal etc.
+
+### Reporte de Lead Novo
+
+Usar quando entrar um lead relevante, quando o usuário pedir para reportar lead ou quando o contexto indicar que vale sinalizar uma oportunidade.
+
+Fonte prioritária:
+
+1. planilha de backup do cliente;
+2. CRM ou export em `dados/`;
+3. contexto enviado pelo usuário;
+4. WhatsApp, se conectado e houver mensagem com os dados.
+
+Se a planilha de backup ou fonte do lead não estiver disponível, perguntar:
+
+```text
+Você consegue me enviar a planilha de backup ou os dados do lead para eu reportar com contexto?
+```
+
+Contexto obrigatório:
+
+- nome;
+- contato disponível;
+- origem/interesse;
+- leitura de qualificação;
+- pedido de retorno para acompanhar qualidade do atendimento.
+
+Estrutura possível:
+
+```text
+✅ NOVO LEAD
+
+Entrou um lead hoje que parece bem quente:
+
+<nome>
+<telefone>
+<e-mail>
+<CNPJ, se houver>
+
+Ele veio buscando por <interesse> e comentou <sinal de intenção>.
+
+Pelo contexto e pelo e-mail comercial, parece ser uma oportunidade bem qualificada e com intenção mais imediata.
+
+<leitura adicional sobre qualidade dos últimos leads, se houver.>
+
+Assim que conseguirem contato com esse lead, me sinalizem por aqui para acompanharmos a qualidade do atendimento e da oportunidade.
+```
+
+Regras:
+
+- Não expor dado sensível além do necessário para o grupo de atendimento.
+- Não chamar todo lead de "quente"; usar isso só quando houver sinal real de intenção.
+- Conectar qualidade do lead aos sinais de campanha quando fizer sentido.
+- Pedir retorno após contato para fechar o ciclo comercial.
+
+### Pré-call
+
+Usar para preparar o cliente antes de uma reunião.
+
+Contexto obrigatório:
+
+- objetivo da call;
+- tópicos;
+- decisões esperadas;
+- materiais que o cliente precisa revisar, se houver.
+
+### Pós-reunião / Alinhamento
+
+Usar para formalizar combinados.
+
+Contexto obrigatório:
+
+- o que foi decidido;
+- próximas ações;
+- responsáveis;
+- prazos, se houver.
+
+Se o usuário pedir pós-call mas não informar os combinados e não houver ata/transcrição no histórico, perguntar.
+
+### Follow-up ou Cobrança
+
+Usar para pedir aprovação, acesso, retorno ou decisão.
+
+Contexto obrigatório:
+
+- o que está pendente;
+- de quem depende;
+- impacto da demora;
+- próximo passo esperado.
+
+Tom deve ser firme sem ser seco. Evitar culpa. Preferir contexto + pedido específico.
+
+### Demanda Encontrada no Contexto
+
+Se o pedido for amplo, procurar demandas recentes em:
+
+- `contexto.md`
+- `planejamento/`
+- `historico/`
+- `entregas/`
+- `outputs/`
+- `campanhas.md`
+- planilha de backup/CRM, quando o assunto for lead
+
+Transformar essas demandas em opções de atendimento. Exemplo:
+
+```markdown
+- Status da aprovação dos criativos de agosto - encontrei entregas recentes em `entregas/social-media-jul-ago-2026`.
+- Reporte de lead novo - encontrei lead recente na planilha de backup.
+```
+
+## Anti-Repetição
+
+Antes de escrever, consultar `perfil.md` e `historico/atendimentos-log.md`.
+
+Evitar repetir:
+
+- mesma saudação da última mensagem;
+- mesmo fechamento;
+- mesma estrutura de blocos;
+- mesmo emoji;
+- frases como "passando para atualizar", "segue abaixo", "fico à disposição" em sequência;
+- tom excessivamente simétrico ou com cara de template.
+
+Variar com naturalidade, sem inventar personalidade. A variação deve vir do contexto.
+
+Se houver WhatsApp conectado, comparar com o que foi enviado recentemente no grupo. O histórico real ganha prioridade sobre o log da skill.
 
 ## Tom
 
-O usuário pode especificar o tom. Quando não especificar, inferir pelo contexto do cliente e pelo tipo de mensagem.
+Inferir pelo cliente, não por uma regra global.
 
-| Tom | Quando usar |
-|---|---|
-| Próximo / caloroso | Clientes com relação estabelecida ("meu querido", primeiro nome, emoji leve) |
-| Neutro / profissional | Grupos maiores, cliente novo, contexto formal |
-| Direto | Updates rápidos, sem saudação longa |
+Sinais para calibrar:
 
-Calibrar pelo histórico do cliente em `contexto.md`.
+- cliente chama pelo primeiro nome ou pelo grupo;
+- conversa usa emoji ou não;
+- cliente responde curto ou com detalhes;
+- atendimento anterior foi formal, consultivo, caloroso ou direto;
+- tema é sensível ou rotineiro;
+- há cobrança, atraso, resultado ruim ou comemoração.
 
----
+Preferir tom consultivo na maioria dos casos: explicar o suficiente para orientar decisão, mas sem textão defensivo.
 
-## Formatos disponíveis
+## O Que Nunca Fazer
 
-### 1. FEITO / PENDENTE
-Status geral de entregas. Usar ✅ / 🔁 como marcadores.
-- Pendentes com prazo em linha separada abaixo do item
-- Não misturar emojis de status diferentes no mesmo bloco
+- Gerar relatório sem período definido.
+- Gerar resultado com número inventado.
+- Gerar status de tarefa sem status confiável.
+- Reportar lead sem fonte ou dados mínimos.
+- Tratar todos os clientes com a mesma voz.
+- Usar estrutura fixa quando o contexto pede outra.
+- Fazer pergunta genérica demais, como "me passa mais contexto?", se já dá para perguntar a lacuna exata.
+- Escrever mensagem com "cara de IA": excesso de simetria, frases polidas demais, seções artificiais, conclusões genéricas.
+- Usar seções vazias, placeholders ou "a preencher".
+- Confundir pasta de app/deploy com cliente principal.
+- Escrever sem acentuação correta.
 
-### 2. Entregas em andamento (➡️)
-Update corrido sem divisão de status. Cada item carrega: o que é + contexto + prazo ou link.
-- Prazo condicional quando há dependência: "Com o acesso, o prazo é: XX/XX"
-- Bloqueio nomeado com diagnóstico + pedido específico
+## Aprendizado e Retroalimentação
 
-### 3. Pré-call
-Compartilhar pauta antes de reunião. Lista limpa, sem emojis de status.
-- Tom leve, encerramento com aviso do link ("10 min antes envio o link")
-
-### 4. Pós-reunião / Alinhamento
-Formalizar combinados + próximas ações com prazo por data.
-- Pode incluir seção narrativa de validação de meta quando relevante
-- Organizado por data, não por status
-
-### 5. Relatório de resultados
-Métricas + contexto + backlog. Referência canônica:
-
-```
-[Saudação nominal]. [Abertura de semana/mês].
-
-📊 RESULTADOS ([MÊS/PERÍODO])
-
-META MENSAL
-Geração de demanda: [X]
-Valor de venda:     R$ [meta]
-
-GERAÇÃO DE DEMANDA
-Investido:     R$ [valor]
-MQLs / Leads:  [X]
-CPL / CP_MQL:  R$ [valor]
-
-CONVERSÃO EM VENDAS
-SQLs:          [X]
-Vendas:        [X]
-CAC:           R$ [valor]
-Valor vendido: R$ [valor]
-
-📝 CONTEXTO
-[1-2 frases honestas. Se bom: comemore + próximo passo. Se abaixo: reconheça + causa + plano.]
-
-🗂️ BACKLOG DA SEMANA
-→ [ação em andamento]
-→ [o que será entregue]
-
-📅 CRONOGRAMA
-[DD.MM] | [HH:MM às HH:MM] — [Evento + pauta breve]
-```
-
-- Usar apenas as seções que têm dados — não preencher com placeholder
-- Alinhamento por espaços nas métricas para criar coluna visual
-- Separadores ━━━ são opcionais, usar só quando o volume de seções justificar
-
-### 6. Resultados parciais
-Mesmo formato do relatório, mas com framing honesto de período no header: `📊 RESULTADOS PARCIAIS (DD/MM a DD/MM)`. O contexto diagnóstico é mais importante que os números — conecta dado → problema → ação.
-
----
-
-## Princípios
-
-- **Trabalha com o que foi fornecido** — sem inventar dados, sem inflar com placeholder
-- **Cada item carrega contexto** — não é lista seca; o "porquê" está no próprio item
-- **Referência a combinados anteriores** — "como alinhamos", "como combinamos em call" cria continuidade
-- **Resultado ruim vem com causa + plano** — nunca só o número negativo
-- **CTA final é específico** — não "fico à disposição" genérico, mas o que exatamente se espera
-- **Encerramento com disponibilidade** — toda mensagem termina com disponibilidade, mas personalizada ao contexto da mensagem quando possível: referenciar o próximo passo ("conforme avançarmos com os criativos, sinalizo aqui"), o que está pendente do cliente ("fico no aguardo da aprovação"), ou o que vem a seguir ("assim que tiver o retorno, atualizo aqui"). Só usar encerramento genérico ("qualquer dúvida me chama") quando não houver nada específico para ancorar
-- **Saudação educada sempre** — toda mensagem começa com saudação que inclui "bom dia/boa tarde", pergunta como a pessoa está ou variação natural ("tudo bem?", "como vai?", "espero que esteja bem"). Nunca só "Oi, [Nome]" seco. Variar a formulação conforme o contexto e tom — não engessar em template fixo
-- **Emoji no bom dia** — em mensagens mais simples e diretas, é natural incluir um emoji casual na saudação (😊 😄 🙏🏻 ✊); não obrigatório em mensagens mais densas ou formais
-- **Links são inline** — nunca em seção separada
-- **Tags nominais** para responsável quando o item está em alguém ou é uma pergunta direcionada
-
----
-
-## Anti-padrões — nunca fazer
-
-- Parágrafos longos justificativos onde uma lista resolve
-- Numeração formal `1. 2.` para pontos distintos — soa corporativo
-- Jargão: "devolutivas", "assertivos", "encaminhamento"
-- Seções vazias ou com "a preencher" — se não tem dado, não tem seção
-- Mensagem que mistura muitos assuntos sem hierarquia clara — preferir separar em mensagens distintas
-
----
-
-## Atualização de contexto do cliente
-
-Após gerar o atendimento, se novas informações sobre o cliente foram mencionadas (fase do projeto, estratégia, resultado, alinhamentos), atualizar `clientes/<cliente>/contexto.md` com o que foi aprendido. Não registrar histórico de conversa — só contexto estruturado.
-
----
-
-## Log de retroalimentação (obrigatório em toda geração)
-
-Depois de entregar a mensagem final ao usuário, anexar uma linha em `clientes/<cliente>/historico/atendimentos-log.md` (criar o arquivo e a pasta `historico/` se não existirem):
+Depois de entregar uma mensagem, registrar em `clientes/<cliente>/historico/atendimentos-log.md`:
 
 ```markdown
-# Log de atendimentos gerados — <Nome do Cliente>
-
-> Gerado por /atendimento-diario a cada execução. Consumido e podado por /contexto-refresh (seção "Rotação recente" em perfil.md). Não editar manualmente.
-
-- DD/MM/AAAA HH:MM | formato: <nome do formato usado> | saudação: "<primeiras ~6 palavras da mensagem>" | fechamento: "<última frase da mensagem>"
+- YYYY-MM-DD HH:MM | tipo: <tipo> | período: <período ou n/a> | saudação: "<início>" | fechamento: "<final>" | observação: <decisão de tom>
 ```
 
-Esse log é só a matéria-prima: quem faz a leitura, cruza com o que realmente foi enviado no grupo e decide o que vira "Rotação recente" ou "Padrão de correção recorrente" em `perfil.md` é o `/contexto-refresh` (nunca esta skill). Registrar sempre — mesmo quando o usuário editar a mensagem manualmente depois, o que importa aqui é o que foi *proposto*, não o que foi de fato enviado.
+Se o usuário corrigir a mensagem neste chat, incorporar a correção em `perfil.md` na seção `Correções recorrentes do humano`.
+
+Se WhatsApp estiver conectado e for possível ver que a mensagem realmente enviada foi diferente da proposta, aprender com a versão enviada:
+
+- atualizar `Padrão real de atendimento`;
+- atualizar `Correções recorrentes do humano`;
+- atualizar `Rotação recente de atendimento`.
+
+Não transformar todo atendimento em contexto estratégico. Atualizar `contexto.md` apenas quando surgir informação estrutural sobre cliente, fase, estratégia, resultado, decisão, processo ou restrição.
+
+## Saída
+
+Se faltar contexto essencial, a saída deve ser uma pergunta consultiva, não a mensagem final.
+
+Se o pedido for amplo, a saída deve ser um menu consultivo de opções.
+
+Se o pedido estiver completo, a saída deve ser:
+
+1. mensagem pronta para WhatsApp;
+2. observação curta, se houver alguma premissa usada ou dado ausente não essencial.
+
+Não envolver a mensagem final em markdown pesado, a menos que a formatação ajude o WhatsApp.
